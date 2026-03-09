@@ -1,3 +1,8 @@
+---
+name: agentbus
+description: Coordinate with other agents using AgentBus — register, claim resources, check for conflicts, log progress, and signal completion via GitHub Issues.
+---
+
 # AgentBus Skill for Claude
 
 ## What is AgentBus?
