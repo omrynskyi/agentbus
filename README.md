@@ -10,54 +10,23 @@ pip install git+https://github.com/omrynskyi/agentbus.git
 
 Requires a GitHub token with `repo` scope.
 
-## Usage
+## How it works
 
-```python
-from agentbus import AgentBus
-import os
+Every agent in a repo gets one GitHub Issue. That Issue is the agent's identity, status board, and audit log. Before touching any shared resource, an agent registers itself, declares what it intends to modify, and checks whether another agent has already claimed those resources. When done, it signals completion so waiting agents can proceed.
 
-bus = AgentBus(repo="your-org/your-repo", token=os.environ["GITHUB_TOKEN"])
+No database. No broker. Just GitHub Issues.
 
-# Register your agent (idempotent)
-agent = bus.register(agent_id="my-agent-01", agent_type="coding", squad="platform")
+## Agent workflow
 
-# Check in and claim files you'll modify
-agent.checkin(
-    task="Refactoring auth module",
-    resources=["auth/tokens.py", "auth/session.py"]
-)
+**Before starting any task that touches shared files or resources:**
 
-# Check for conflicts before doing any work
-conflicts = agent.check_conflicts(["auth/tokens.py", "auth/session.py"])
-if conflicts:
-    agent.block(blocked_by=conflicts[0].agent_id)
-    bus.wait_for(conflicts[0].agent_id, status="done", timeout=300)
-    agent.unblock()
+1. Register with the bus (idempotent — safe to call every session)
+2. Check in with your task description and the resources you intend to modify
+3. Check for conflicts — if another agent has claimed a resource, wait or abort
+4. Do your work, logging progress as you go
+5. Signal done or failed when finished — this releases your resource claims
 
-# Do your work, log progress
-agent.log("Completed tokens.py — moving to session.py")
-
-# Signal completion
-agent.done(summary="Auth refactor complete, all tests passing")
-
-# Or signal failure
-# agent.fail(reason="Merge conflict — needs human review")
-```
-
-## See what other agents are doing
-
-```python
-# All active agents
-for a in bus.query(status="working"):
-    print(f"{a.agent_id}: {a.current_task} → {a.claimed_resources}")
-
-# Scoped to your squad
-bus.query(status="working", squad="platform")
-
-# Check a specific agent
-peer = bus.get("schema-migration-agent-01")
-print(peer.status, peer.current_task)
-```
+**Before writing to any file, always check whether another agent owns it.** If there's a conflict, either wait for the owning agent to finish or fail gracefully and surface the conflict to humans.
 
 ## Human visibility
 
@@ -65,8 +34,10 @@ Open the Issues tab in your repo:
 
 - `label:agentbus` — all registered agents
 - `label:agentbus label:status:working` — currently active
-- `label:agentbus:conflict` — conflicts needing attention
+- `label:agentbus:conflict` — conflicts needing human attention
 
 ## Claude Code skill
 
-See [`agentbus-skill.md`](./agentbus-skill.md) for the Claude-compatible skill file. Add it to your Claude session so Claude automatically uses AgentBus when working in a shared repo.
+The `/agentbus` skill is in `.claude/skills/agentbus.md`. When working in a repo that uses AgentBus, Claude will automatically follow the coordination protocol — registering, claiming resources, detecting conflicts, and signaling completion.
+
+For full protocol details, see [`agentbus-skill.md`](./agentbus-skill.md).
